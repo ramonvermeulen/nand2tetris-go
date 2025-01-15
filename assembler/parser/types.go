@@ -6,12 +6,20 @@ type ParsedLine interface {
 	String() string
 }
 
+type Instruction interface {
+	BinaryString(symbolTable *map[string]int) string
+}
+
 type AInstruction struct {
-	Address int
+	Symbol string
 }
 
 func (inst AInstruction) String() string {
-	return fmt.Sprintf("@%d\n", inst.Address)
+	return fmt.Sprintf("@%s\n", inst.Symbol)
+}
+
+func (inst AInstruction) BinaryString(symbolTable *map[string]int) string {
+	return ""
 }
 
 type CInstruction struct {
@@ -21,8 +29,17 @@ type CInstruction struct {
 }
 
 func (inst CInstruction) String() string {
-	// TODO(ramon) implement cases with no jump or dest
+	if inst.Jump == "" {
+		return fmt.Sprintf("%s=%s\n", inst.Dest, inst.Comp)
+	}
+	if inst.Dest == "" {
+		return fmt.Sprintf("%s;%s\n", inst.Comp, inst.Jump)
+	}
 	return fmt.Sprintf("%s=%s;%s\n", inst.Dest, inst.Comp, inst.Jump)
+}
+
+func (inst CInstruction) BinaryString(symbolTable *map[string]int) string {
+	return ""
 }
 
 type Label struct {

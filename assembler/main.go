@@ -3,13 +3,55 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
+	"nand2tetris-go/asm"
+	"nand2tetris-go/parser"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
 func Assemble(asmFilePath string, hackFilePath string) {
-	return
+	parsedLines := []parser.ParsedLine{}
+	prs, err := parser.NewParser(asmFilePath)
+	if err != nil {
+		log.Fatalf("Error creating parser: %v", err)
+	}
+	defer prs.Close()
+	assembler, err := asm.NewAssembler(hackFilePath)
+	if err != nil {
+		log.Fatalf("Error creating assembler: %v", err)
+	}
+	defer assembler.Close()
+
+	// first pass
+	lineCounter := 0
+	symbolCounter := 16
+	hasMoreLines := true
+	for hasMoreLines {
+		lineCounter++
+		parsedLine, hasNext := prs.Advance()
+		hasMoreLines = hasNext
+		if parsedLine != nil {
+			if l, ok := parsedLine.(parser.Label); ok {
+				lineCounter--
+				assembler.SymbolTable[l.Name] = lineCounter
+			}
+			if a, ok := parsedLine.(parser.AInstruction); ok {
+				if _, exists := assembler.SymbolTable[a.Symbol]; !exists {
+					if _, err := strconv.Atoi(a.Symbol); err != nil {
+						assembler.SymbolTable[a.Symbol] = symbolCounter
+						symbolCounter++
+					}
+				}
+			}
+			parsedLines = append(parsedLines, parsedLine)
+		}
+	}
+
+	// second pass
+
 }
 
 func ParseArguments() string {

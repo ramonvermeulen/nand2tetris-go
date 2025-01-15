@@ -3,7 +3,7 @@ package parser
 import "testing"
 
 func TestAInstruction_String(t *testing.T) {
-	aInstruction := AInstruction{Address: 123}
+	aInstruction := AInstruction{Symbol: "123"}
 	expected := "@123\n"
 	if aInstruction.String() != expected {
 		t.Errorf("Expected %s, got %s", expected, aInstruction.String())
