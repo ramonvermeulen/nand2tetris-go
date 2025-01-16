@@ -1,2 +1,2 @@
 # nand2tetris-go
-T.b.d.
+Go implementation for some of the nand2tetris course exercises
