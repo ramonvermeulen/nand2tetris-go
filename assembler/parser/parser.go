@@ -2,11 +2,21 @@ package parser
 
 import (
 	"bufio"
-	"log"
+	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 )
+
+type ParsingError struct {
+	Line string
+	Err  error
+}
+
+func (e *ParsingError) Error() string {
+	return fmt.Sprintf("error parsing line \"%s\": %v", e.Line, e.Err)
+}
 
 type Parser struct {
 	file           *os.File
@@ -31,56 +41,134 @@ func (p *Parser) isSingleWord(s string) bool {
 	return re.MatchString(s)
 }
 
-func (p *Parser) Advance() (ParsedLine, bool) {
-	// TODO(ramon) refactor into multiple functions per instruction type
+func (p *Parser) advance() (ParsedLine, bool, error) {
 	if !p.scanner.Scan() {
-		return nil, false
+		if err := p.scanner.Err(); err != nil {
+			return nil, false, fmt.Errorf("scanner error: %w", err)
+		}
+		return nil, false, nil // EOF
 	}
+
 	line := p.scanner.Text()
 	trimmedLine := strings.TrimSpace(line)
+	if p.handleComments(trimmedLine) {
+		return p.advance()
+	}
+	parsedLine, valid := p.parseLine(trimmedLine)
+	if !valid {
+		return nil, false, &ParsingError{Line: line, Err: fmt.Errorf("invalid instruction format")}
+	}
 
-	// Multi-line comment block
+	return parsedLine, true, nil
+}
+
+func (p *Parser) handleComments(trimmedLine string) bool {
+	if trimmedLine == "" || strings.HasPrefix(trimmedLine, "//") {
+		return true
+	}
 	if p.isCommentBlock {
 		if strings.HasSuffix(trimmedLine, "*/") {
 			p.isCommentBlock = false
 		}
-		return p.Advance()
+		return true
 	}
 	if strings.HasPrefix(trimmedLine, "/*") {
-		// Multi-line syntax on single line
 		if !strings.HasSuffix(trimmedLine, "*/") {
 			p.isCommentBlock = true
 		}
-		return p.Advance()
+		return true
 	}
+	return false
+}
 
-	// Whitespace or single-line comment
-	if trimmedLine == "" || strings.HasPrefix(trimmedLine, "//") {
-		return p.Advance()
-	}
-
-	firstChar := trimmedLine[:1]
-
-	// Label
-	if firstChar == "(" && strings.HasSuffix(trimmedLine, ")") && p.isSingleWord(trimmedLine) {
+func (p *Parser) parseLine(trimmedLine string) (ParsedLine, bool) {
+	if p.isLabel(trimmedLine) {
 		return Label{Name: strings.Trim(trimmedLine, "()")}, true
 	}
-
-	// A-Instruction
-	if firstChar == "@" && p.isSingleWord(trimmedLine) {
+	if p.isAInstruction(trimmedLine) {
 		return AInstruction{Symbol: strings.Replace(trimmedLine, "@", "", 1)}, true
 	}
+	if p.isCInstruction(trimmedLine) {
+		return p.parseCInstruction(trimmedLine)
+	}
+	return nil, false
+}
 
-	// C-Instruction
-	if strings.ContainsAny(firstChar, "01AD!-M") {
-		re := regexp.MustCompile(`^(?:(\w+)=)?([^;]+)(?:;(\w+))?$`)
-		matches := re.FindStringSubmatch(trimmedLine)
-		dest, comp, jump := matches[1], matches[2], matches[3]
-		return CInstruction{Dest: dest, Comp: comp, Jump: jump}, true
+func (p *Parser) isLabel(trimmedLine string) bool {
+	return trimmedLine[:1] == "(" && strings.HasSuffix(trimmedLine, ")") && p.isSingleWord(trimmedLine)
+}
+
+func (p *Parser) isAInstruction(trimmedLine string) bool {
+	return strings.HasPrefix(trimmedLine, "@") && p.isSingleWord(trimmedLine)
+}
+
+func (p *Parser) isCInstruction(trimmedLine string) bool {
+	firstChar := trimmedLine[:1]
+	return strings.ContainsAny(firstChar, "01AD!-M")
+}
+
+func (p *Parser) parseCInstruction(trimmedLine string) (ParsedLine, bool) {
+	re := regexp.MustCompile(`^(?:(\w+)=)?([^;]+)(?:;(\w+))?$`)
+	matches := re.FindStringSubmatch(trimmedLine)
+	if len(matches) < 3 {
+		return nil, false
+	}
+	dest, comp, jump := matches[1], matches[2], matches[3]
+	return CInstruction{Dest: dest, Comp: comp, Jump: jump}, true
+}
+
+func (p *Parser) ParseAndAddSymbols(symbolTable map[string]int) ([]ParsedLine, error) {
+	parsedLines, err := p.firstPass(symbolTable)
+	if err != nil {
+		return nil, err
 	}
 
-	// Unparsable instruction meaning incorrect "hack" assembly
-	log.Fatalf("Unparsable line: \"%s\"", line)
-	os.Exit(1)
-	return nil, false
+	if err := p.secondPass(parsedLines, symbolTable); err != nil {
+		return nil, err
+	}
+
+	return parsedLines, nil
+}
+
+func (p *Parser) firstPass(symbolTable map[string]int) ([]ParsedLine, error) {
+	var parsedLines []ParsedLine
+	instructionCounter := 0
+	hasMoreLines := true
+
+	for hasMoreLines {
+		parsedLine, hasNext, err := p.advance()
+		hasMoreLines = hasNext
+		if err != nil {
+			return nil, fmt.Errorf("error during first pass: %w", err)
+		}
+
+		if parsedLine != nil {
+			instructionCounter++
+			if label, ok := parsedLine.(Label); ok {
+				instructionCounter-- // label is not an instruction
+				symbolTable[label.Name] = instructionCounter
+			}
+
+			parsedLines = append(parsedLines, parsedLine)
+		}
+	}
+
+	return parsedLines, nil
+}
+
+func (p *Parser) secondPass(parsedLines []ParsedLine, symbolTable map[string]int) error {
+	symbolCounter := 16
+
+	for _, parsedLine := range parsedLines {
+		if aInst, ok := parsedLine.(AInstruction); ok {
+			if _, exists := symbolTable[aInst.Symbol]; !exists {
+				if _, err := strconv.Atoi(aInst.Symbol); err != nil {
+					symbolTable[aInst.Symbol] = symbolCounter
+					symbolCounter++
+				}
+			}
+		}
+	}
+
+	return nil
 }
