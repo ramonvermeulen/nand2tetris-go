@@ -11,7 +11,6 @@ func TestAInstruction_String(t *testing.T) {
 }
 
 func TestCInstruction_String(t *testing.T) {
-	// TODO(ramon) add more cases (parameterized tests)
 	cInstruction := CInstruction{Dest: "D", Comp: "M", Jump: "JGT"}
 	expected := "D=M;JGT\n"
 	if cInstruction.String() != expected {

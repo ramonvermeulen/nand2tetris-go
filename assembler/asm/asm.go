@@ -2,13 +2,13 @@ package asm
 
 import (
 	"fmt"
+	"io"
 	"nand2tetris-go/parser"
-	"os"
 	"strconv"
 )
 
 type Assembler struct {
-	file          *os.File
+	writer        io.Writer
 	SymbolTable   map[string]int
 	symbolCounter int
 }
@@ -29,19 +29,11 @@ func createInitialSymbolTable() map[string]int {
 	return symbolTable
 }
 
-func NewAssembler(hackFilePath string) (*Assembler, error) {
-	file, err := os.Create(hackFilePath)
-	if err != nil {
-		return nil, err
-	}
+func NewAssembler(writer io.Writer) *Assembler {
 	return &Assembler{
 		SymbolTable: createInitialSymbolTable(),
-		file:        file,
-	}, nil
-}
-
-func (a *Assembler) Close() error {
-	return a.file.Close()
+		writer:      writer,
+	}
 }
 
 func (a *Assembler) assembleAInstruction(aInst parser.AInstruction) (string, error) {
@@ -103,9 +95,9 @@ func (a *Assembler) AssembleLine(parsedLine parser.ParsedLine) error {
 		}
 	}
 	if output != "" {
-		_, err = a.file.Write([]byte(fmt.Sprintf("%s\n", output)))
+		_, err = a.writer.Write([]byte(fmt.Sprintf("%s\n", output)))
 		if err != nil {
-			return fmt.Errorf("failed to write output to file: %v", err)
+			return fmt.Errorf("failed to write output to writer: %v", err)
 		}
 	}
 

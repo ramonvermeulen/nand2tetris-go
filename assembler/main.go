@@ -12,17 +12,19 @@ import (
 )
 
 func Assemble(asmFilePath string, hackFilePath string) {
-	prs, err := parser.NewParser(asmFilePath)
+	asmFile, err := os.Open(asmFilePath)
 	if err != nil {
-		log.Fatalf("Error creating parser: %v", err)
+		log.Fatalf("Error opening asm file: %v", err)
 	}
-	defer prs.Close()
+	defer asmFile.Close()
+	prs := parser.NewParser(asmFile)
 
-	assembler, err := asm.NewAssembler(hackFilePath)
+	hackFile, err := os.Create(hackFilePath)
 	if err != nil {
-		log.Fatalf("Error creating assembler: %v", err)
+		log.Fatalf("Error creating hack file: %v", err)
 	}
-	defer assembler.Close()
+	defer hackFile.Close()
+	assembler := asm.NewAssembler(hackFile)
 
 	parsedLines, err := prs.ParseAndAddSymbols(assembler.SymbolTable)
 	if err != nil {

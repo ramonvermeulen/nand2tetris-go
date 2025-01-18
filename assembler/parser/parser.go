@@ -3,7 +3,7 @@ package parser
 import (
 	"bufio"
 	"fmt"
-	"os"
+	"io"
 	"regexp"
 	"strconv"
 	"strings"
@@ -19,21 +19,13 @@ func (e *ParsingError) Error() string {
 }
 
 type Parser struct {
-	file           *os.File
+	reader         io.Reader
 	scanner        *bufio.Scanner
 	isCommentBlock bool
 }
 
-func NewParser(filePath string) (*Parser, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, err
-	}
-	return &Parser{file: file, scanner: bufio.NewScanner(file)}, nil
-}
-
-func (p *Parser) Close() error {
-	return p.file.Close()
+func NewParser(reader io.Reader) *Parser {
+	return &Parser{reader: reader, scanner: bufio.NewScanner(reader)}
 }
 
 func (p *Parser) isSingleWord(s string) bool {
